@@ -76,6 +76,14 @@ if st.button("Translate & Speak"): # Button To run all the code of the translati
                 # Third-Part 1 We need to display the audio for the user to be able to hear
                 st.audio(audio_fp, format="audio/mp3") # Displays the audi for the user as a mp3
 
+                st.download_button(
+                    label="Download Translation Button(MP3)"
+                    data=audio_fp
+                    file_name="translated_audio.mp3",
+                    mime="audio/mp3"
+                )
+
+
 
         
             except Exception as e:
