@@ -89,6 +89,10 @@ if st.button("Translate & Speak"): # Button To run all the code of the translati
             except Exception as e:
                 st.error(f"An Error Happened: {e}") #Shows if a error happens and it shows it to the user
 
-with st._bottom: # For the Bottom using streamlit.bottomm, also added my github for no reason ig 
+try:
+    bottom = st._bottom  # private API on newer streamlit
+except AttributeError:
+    bottom = st.container
+with bottom: # For the Bottom using streamlit.bottom, also added my github for no reason ig 
     st.write("Made With Love By Connor Sawaya | https://github.com/ConnorSawaya?tab=repositories ") # Shows my repos 
     
