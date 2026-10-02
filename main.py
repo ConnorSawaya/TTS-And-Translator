@@ -1,7 +1,19 @@
-import streamlit as st # Main Streamlit thing for the entire code to run 
-from deep_translator import GoogleTranslator # Translate Part Free From google cuz i luv googel
-from gtts import gTTS # Free TTS kinda has bad voice but it works 
-import io 
+import logging
+import time
+
+import streamlit as st
+
+from app_logic import (
+    MAX_INPUT_CHARACTERS,
+    USER_SAFE_ERROR_MESSAGE,
+    create_audio_bytes,
+    record_request,
+    seconds_until_allowed,
+    translate_text,
+    validate_input,
+)
+
+logger = logging.getLogger(__name__)
 
 # Page Config
 st.set_page_config( # Page config stuff its the thing you see at the top of the page like info about it
@@ -41,53 +53,52 @@ languages = { # Different languages for Different translations
 target_lan_name = st.sidebar.selectbox("Select Language:", list(languages.keys())) # Target language bane
 target_lang_code = languages[target_lan_name] #graps the code from the list above
 
-text_input = st.text_area('Enter Text To Translate:', placeholder="Type Something here...") # text box for input!
+text_input = st.text_area(
+    'Enter Text To Translate:',
+    placeholder="Type Something here...",
+    max_chars=MAX_INPUT_CHARACTERS,
+)
+st.caption(
+    f"Up to {MAX_INPUT_CHARACTERS:,} characters. Submitted text is sent to "
+    "Google Translate and Google Text-to-Speech."
+)
 
 
 
 
-if st.button("Translate & Speak"): # Button To run all the code of the translation and tts to happen
+if st.button("Translate & Speak"):
+    try:
+        cleaned_text = validate_input(text_input)
+    except ValueError as error:
+        st.warning(str(error))
+    else:
+        request_times = st.session_state.get("request_times", [])
+        now = time.monotonic()
+        wait_seconds = seconds_until_allowed(now, request_times)
+        if wait_seconds:
+            st.warning(f"Please wait {wait_seconds} seconds before trying again.")
+        else:
+            st.session_state.request_times = record_request(now, request_times)
+            with st.spinner("Translating and generating audio..."):
+                try:
+                    translated_text = translate_text(cleaned_text, target_lang_code)
+                    audio_bytes = create_audio_bytes(translated_text, target_lang_code)
 
-    if text_input.strip() =="": # if the box is empty when someone clicks on it just tells the user to input something
-        st.warning("Put something in the box 🤦")
-    else: # basically if theres text go on...
-        with st.spinner("Processing..."): # most of the time you wont see this, spinner if its loadin
-            try:
-                # First We need to Translate the text from the user
-                translated_text = GoogleTranslator(source = "auto", target=target_lang_code).translate(text_input) #Uses Free Google Translate to translate the text give
-
-
-                # Shows the text
-                st.subheader("Results")
-                st.success(f"**Translated ({target_lan_name}):**") 
-                st.write(translated_text) #
-
-
-                
-
-                # Second We need to do TTS
-                tts = gTTS(text=translated_text, lang=target_lang_code)# TTS STUFF!! also uses the language code from the selection to give it to google 
-
-                # Second We need to save the audio to a buffer byte instead of a file cuz streamlits sucks kinda but its easy to use so yeeeahhH!!!
-                audio_fp = io.BytesIO()
-                tts.write_to_fp(audio_fp)
-                audio_fp.seek(0)
-                
-                # Third-Part 1 We need to display the audio for the user to be able to hear
-                st.audio(audio_fp, format="audio/mp3") # Displays the audi for the user as a mp3
-
-                st.download_button(
-                    label="Download Translation Button(MP3)",
-                    data=audio_fp,
-                    file_name="translated_audio.mp3",
-                    mime="audio/mp3"
-                )
-
-
-
-        
-            except Exception as e:
-                st.error(f"An Error Happened: {e}") #Shows if a error happens and it shows it to the user
+                    st.subheader("Results")
+                    st.success(f"**Translated ({target_lan_name}):**")
+                    st.write(translated_text)
+                    st.audio(audio_bytes, format="audio/mp3")
+                    st.download_button(
+                        label="Download Translation Button(MP3)",
+                        data=audio_bytes,
+                        file_name="translated_audio.mp3",
+                        mime="audio/mp3",
+                    )
+                except Exception as error:
+                    logger.warning(
+                        "Translation request failed (%s)", type(error).__name__
+                    )
+                    st.error(USER_SAFE_ERROR_MESSAGE)
 
 try:
     bottom = st._bottom  # private API on newer streamlit
